@@ -90,19 +90,53 @@ JSON.stringify({
 
 ---
 
+## LinkedIn Easy Apply
+
+**Embedding**: No iframe. Easy Apply opens as an in-page modal dialog on top of the job posting (not a page navigation), so it's same-origin DOM — no cross-origin workaround needed.
+
+**MCP tool access**: `read_page` and `form_input` work inside the modal once it's open. The modal is inserted dynamically, so re-run `read_page` after clicking "Easy Apply" rather than relying on a pre-click scan.
+
+**URL pattern**:
+- Job posting: `https://www.linkedin.com/jobs/view/{jobId}/`
+- Search results filtered to Easy Apply only: `https://www.linkedin.com/jobs/search/?keywords=...&f_AL=true`
+
+**Two application paths — check which one a job uses first**:
+1. **"Easy Apply" button** — opens the in-page modal described below; submits without leaving LinkedIn.
+2. **"Apply" button** (sometimes labeled "Apply on company site") — redirects off LinkedIn to the employer's own ATS. Treat this exactly like a normal job link: detect the destination URL after the redirect and route through the matching Greenhouse/Lever/Workday workflow above.
+
+**Easy Apply modal — typical steps** (order and count vary by job; always scout the current step with `read_page`/screenshot rather than assuming a fixed layout):
+1. **Contact info** — usually pre-filled from the LinkedIn profile (email, phone + country code dropdown). Rarely needs changes; verify and move on.
+2. **Resume** — choose from resumes already on the LinkedIn profile (card/radio selector) or upload a new one. Prefer selecting an existing upload if the tailored resume was already added there; a genuinely new file hits the same upload limitation as other ATSes (flag for manual upload — see File Upload Fields).
+3. **Additional questions** — company-specific screening questions (years of experience with X, work authorization, sponsorship, relocation, salary expectations). Match these against `application-data.md` the same way as other ATSes and cache new answers under "Custom Answers".
+4. **Review** — final summary screen before submission.
+
+Steps advance with a "Next" button; the last content step has "Review" then "Submit application". A progress indicator (dots or a bar) near the top of the modal shows how many steps remain.
+
+**Detecting Easy Apply availability**: Look for a button with accessible name "Easy Apply" on the posting page. If it's not there, only the external "Apply" path exists — follow it and detect the resulting ATS instead.
+
+**Known friction points**:
+- Clicking outside the modal or its close (X) icon dismisses it — avoid stray clicks near the modal edges.
+- Some screening questions use custom dropdowns/sliders (e.g. salary range) — click to open, use `find` to locate the option, click it (same pattern as Workday dropdowns).
+- If a verification challenge, CAPTCHA, or "unusual activity" prompt appears at any point, **stop immediately and hand control back to the user** — never attempt to solve or bypass it.
+
+**Rate-limiting caution**: LinkedIn restricts accounts that submit many applications in rapid succession. Always apply to one job at a time, only when the user explicitly triggers that specific application (same explicit submit-confirmation gate as every other ATS below) — never iterate through a job list submitting applications without a per-job trigger.
+
+---
+
 ## Automation Strategy Summary
 
-| Feature | Greenhouse | Lever | Workday |
-|---------|-----------|-------|---------|
-| Iframe | Yes (cross-origin) | No | No |
-| `read_page` works | No (needs workaround) | Yes | Yes |
-| `form_input` works | No (needs workaround) | Yes | Yes (after auth) |
-| Auth required | No | No | Yes (account) |
-| Form type | Single page | Single page | Multi-step wizard |
-| Apply button | "Apply for this job" | "APPLY FOR THIS JOB" | "Apply Now" → landing page |
-| Difficulty | Medium | Easy | Hard |
+| Feature | Greenhouse | Lever | Workday | LinkedIn Easy Apply |
+|---------|-----------|-------|---------|----------------------|
+| Iframe | Yes (cross-origin) | No | No | No (in-page modal) |
+| `read_page` works | No (needs workaround) | Yes | Yes | Yes (after modal opens) |
+| `form_input` works | No (needs workaround) | Yes | Yes (after auth) | Yes |
+| Auth required | No | No | Yes (account) | Yes (user's own LinkedIn session) |
+| Form type | Single page | Single page | Multi-step wizard | Multi-step modal |
+| Apply button | "Apply for this job" | "APPLY FOR THIS JOB" | "Apply Now" → landing page | "Easy Apply" (or external "Apply") |
+| Difficulty | Medium | Easy | Hard | Medium |
 
 **Recommended approach by ATS**:
 - **Lever**: Direct form filling via `form_input` with refs from `read_page`. Most straightforward.
 - **Greenhouse**: Extract iframe tokens → navigate to direct form URL → fill fields. Requires extra navigation step.
 - **Workday**: User must sign in first. Then assist with multi-step form filling across 5 wizard pages + review. Must scroll through each page to discover all fields since `read_page` only returns viewport-visible elements. Radio buttons require coordinate-based clicking. Use validation errors ("Save and Continue" with empty fields) to discover all required fields on a page.
+- **LinkedIn Easy Apply**: Click "Easy Apply", then re-scan the modal per step (contact info → resume → screening questions → review). One job at a time, always with explicit submit confirmation, and back off immediately on any verification challenge. If a job only has an external "Apply" button, treat it as a normal ATS link instead.

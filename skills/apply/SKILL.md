@@ -1,6 +1,6 @@
 ---
 name: apply
-description: Fill out a job application on Greenhouse, Lever, or Workday
+description: Fill out a job application on Greenhouse, Lever, Workday, or LinkedIn Easy Apply
 argument-hint: "job URL, 'last' to use most recent job, or 'current' to fill the active browser tab"
 ---
 
@@ -8,7 +8,7 @@ argument-hint: "job URL, 'last' to use most recent job, or 'current' to fill the
 
 > **Priority hierarchy**: See `shared/references/priority-hierarchy.md` for conflict resolution.
 
-Fill out job application forms on Greenhouse, Lever, and Workday using browser automation.
+Fill out job application forms on Greenhouse, Lever, Workday, and LinkedIn (Easy Apply) using browser automation through the user's own logged-in session — never by creating accounts or handling credentials directly.
 
 ## Quick Start
 
@@ -126,6 +126,15 @@ Set up browser per `shared/references/browser-setup.md` (`tabs_context` → `tab
 - If a landing page appears with Autofill/Manual options, click "Apply Manually".
 - If an auth gate appears, **tell the user to sign in, then say "continue" when ready**. Account creation is a prohibited action — the user must handle authentication themselves.
 
+**LinkedIn** (`linkedin.com/jobs/view/...`):
+- Navigate to the posting.
+- If an auth gate appears, **tell the user to sign in to LinkedIn in that tab, then say "continue" when ready**. Never create an account or enter credentials on the user's behalf.
+- Look for an "Easy Apply" button:
+  - **Present**: click it to open the modal, then scan the first step per the LinkedIn Easy Apply pattern in `shared/references/ats-patterns.md` (filling and advancing through the modal happens later, in Step 7).
+  - **Absent** (only a plain "Apply" / "Apply on company site" button): click it, follow any redirect, and re-detect the ATS from the resulting URL — treat it as Greenhouse/Lever/Workday/Unknown per the patterns above.
+- If a verification challenge or CAPTCHA appears at any point, stop and tell the user — do not attempt to solve it.
+- Apply to one LinkedIn job at a time. Never loop through multiple LinkedIn jobs in a single unattended pass — each one needs its own Step 6 approval and Step 8 submit confirmation.
+
 **Unknown ATS**:
 - Navigate to the URL, take a screenshot
 - Attempt to identify the form. If unrecognizable, tell the user and ask for guidance.
@@ -234,7 +243,7 @@ After the user approves (with any edits), cache any new answers in `DATA_DIR/app
 After approval, fill everything in one pass.
 
 **Delegate to the subagent.** Invoke `scripts/fill-page.md` with:
-- ATS type (lever/greenhouse/workday/unknown)
+- ATS type (lever/greenhouse/workday/linkedin/unknown)
 - The approved field→value mapping (all answers, not just application data)
 - Tab ID
 - File paths for resume and cover letter uploads
@@ -246,6 +255,12 @@ The subagent fills all fields on the current page, then returns what was filled 
 2. If validation errors: read the errors, fix the fields, retry
 3. On the new page: scan fields (Step 5 logic), match against the approved answers, fill, advance
 4. Repeat until reaching the review page
+
+**For the LinkedIn Easy Apply modal:**
+1. Fill the current step → click "Next"
+2. If validation errors appear inline: read them, fix the fields, retry "Next"
+3. On the new step: re-scan (`read_page`) since the modal content changes, match against the approved answers, fill, advance
+4. Repeat until reaching "Review", then stop for Step 8 (do not click "Submit application" yet)
 
 **File upload handling:**
 MCP tools can only upload images via `upload_image`. For PDF/DOCX resume and cover letter uploads, tell the user the file path and ask them to upload manually. This is a known limitation — include the path in the Step 6 summary so the user can upload while reviewing.
@@ -333,6 +348,8 @@ Match form field labels (case-insensitive, fuzzy) to application data:
 - `read_page(filter="interactive")` only returns viewport-visible elements. Must scroll top-to-bottom, calling `read_page` at each scroll position.
 - Radio buttons are NOT returned by `read_page` — use `find` tool or `computer` click at coordinates.
 - Dropdowns are `button` elements that open popup panels. Click the button → use `find` or `read_page` to locate options → click the option. For hierarchical dropdowns (like "How Did You Hear"), search within the popup using the Search textbox.
+
+**LinkedIn Easy Apply**: `form_input` works directly inside the modal once it's open. Contact info is usually pre-filled from the profile — verify, don't overwrite unless wrong. Resume step: prefer selecting an existing uploaded resume over a new file upload. Screening-question dropdowns/sliders behave like Workday's (click → `find` the option → click). Stop immediately on any verification/CAPTCHA prompt and hand control back to the user.
 
 ---
 
