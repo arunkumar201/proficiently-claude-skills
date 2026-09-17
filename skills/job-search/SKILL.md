@@ -99,6 +99,8 @@ For **Medium-fit** jobs, try to resolve the employer URL but don't save the full
 
 If you can't resolve the direct link for a job, note the company name so the user can find it themselves. Never show hiring.cafe URLs to the user.
 
+**LinkedIn-sourced jobs**: if the resolved link is a LinkedIn job posting (`linkedin.com/jobs/view/...`) rather than the employer's own site, that's still a valid apply target — `/proficiently:apply` now supports LinkedIn Easy Apply directly. Save the LinkedIn URL as-is; don't try to dig further for a separate employer URL.
+
 ### Step 6: Present Results
 
 Show only NEW High/Medium fits not in previous history.
